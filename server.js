@@ -67,6 +67,53 @@ pool.getConnection()
 
 console.log('🔧 Setting up routes...');
 
+// Auto-migration: Add missing columns and fix schema
+pool.getConnection()
+    .then(connection => {
+        console.log('✅ Database connected successfully');
+        
+        // Fix stock_batches table schema
+        connection.query(`
+            SELECT COLUMN_NAME 
+            FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = 'canteen_pos' 
+            AND TABLE_NAME = 'stock_batches'
+        `).then(([columns]) => {
+            const columnNames = columns.map(c => c.COLUMN_NAME);
+            const updates = [];
+            
+            // Add notes column if missing
+            if (!columnNames.includes('notes')) {
+                console.log('🔧 Adding "notes" column to stock_batches...');
+                updates.push(connection.query(`
+                    ALTER TABLE stock_batches 
+                    ADD COLUMN notes TEXT NULL
+                `));
+            }
+            
+            // Make batch_code nullable or add default value
+            if (columnNames.includes('batch_code')) {
+                console.log('🔧 Making batch_code nullable...');
+                updates.push(connection.query(`
+                    ALTER TABLE stock_batches 
+                    MODIFY COLUMN batch_code VARCHAR(50) NULL
+                `));
+            }
+            
+            return Promise.all(updates);
+        }).then(() => {
+            console.log('✅ Database schema is up to date');
+        }).catch(err => {
+            console.log('ℹ️ Schema check skipped (normal if database not set up yet)');
+        }).finally(() => {
+            connection.release();
+        });
+    })
+    .catch(err => {
+        console.error('⚠️ Database connection warning:', err.message);
+        console.error('This is normal if setup hasn\'t been run yet.');
+    });
+
 // Helper function to log activity
 async function logActivity(user_id, action, details = null) {
     try {
@@ -100,6 +147,82 @@ app.post('/api/auth/login', async (req, res) => {
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ==================== USER REGISTRATION ====================
+
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        const { username, password, full_name, role } = req.body;
+        
+        // Validate required fields
+        if (!username || !password || !full_name || !role) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'All fields are required' 
+            });
+        }
+        
+        // Validate username length
+        if (username.length < 4 || username.length > 50) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Username must be between 4 and 50 characters' 
+            });
+        }
+        
+        // Validate password length
+        if (password.length < 6) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Password must be at least 6 characters long' 
+            });
+        }
+        
+        // Validate role
+        const validRoles = ['owner', 'manager', 'cashier'];
+        if (!validRoles.includes(role)) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Invalid role specified' 
+            });
+        }
+        
+        // Check if username already exists
+        const [existingUsers] = await pool.query(
+            'SELECT id FROM users WHERE username = ?',
+            [username]
+        );
+        
+        if (existingUsers.length > 0) {
+            return res.status(409).json({ 
+                success: false, 
+                message: 'Username already exists. Please choose a different username.' 
+            });
+        }
+        
+        // Insert new user
+        const [result] = await pool.query(
+            'INSERT INTO users (username, password, full_name, role, is_active) VALUES (?, ?, ?, ?, TRUE)',
+            [username, password, full_name, role]
+        );
+        
+        // Log the registration
+        await logActivity(result.insertId, 'register', `New ${role} account created: ${username}`);
+        
+        res.json({ 
+            success: true, 
+            message: 'Registration successful',
+            user_id: result.insertId 
+        });
+        
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error during registration. Please try again.' 
+        });
     }
 });
 
@@ -465,6 +588,8 @@ app.get('/api/inventory/logs', async (req, res) => {
     }
 });
 
+
+
 // ==================== STOCK BATCHES ====================
 
 app.get('/api/inventory/batches', async (req, res) => {
@@ -546,6 +671,91 @@ app.post('/api/inventory/add-stock', async (req, res) => {
     } catch (error) {
         await connection.rollback();
         console.error('Add stock error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
+// Add this endpoint to your server.js in the INVENTORY section
+
+// ==================== DELETE STOCK BATCH ====================
+
+app.delete('/api/inventory/batch/:batchId', async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        
+        const { batchId } = req.params;
+        const { user_id } = req.body;
+        
+        // Get batch info before deleting
+        const [batches] = await connection.query(
+            'SELECT sb.*, p.name as product_name FROM stock_batches sb JOIN products p ON sb.product_id = p.id WHERE sb.id = ?',
+            [batchId]
+        );
+        
+        if (batches.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ success: false, message: 'Batch not found' });
+        }
+        
+        const batch = batches[0];
+        
+        // Get current product stock
+        const [products] = await connection.query(
+            'SELECT stock_quantity FROM products WHERE id = ?',
+            [batch.product_id]
+        );
+        
+        const quantity_before = products[0].stock_quantity;
+        const quantity_after = quantity_before - batch.quantity;
+        
+        // Make sure we don't go negative
+        if (quantity_after < 0) {
+            await connection.rollback();
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Cannot delete batch: would result in negative stock' 
+            });
+        }
+        
+        // Update product stock
+        await connection.query(
+            'UPDATE products SET stock_quantity = ? WHERE id = ?',
+            [quantity_after, batch.product_id]
+        );
+        
+        // Delete the batch
+        await connection.query('DELETE FROM stock_batches WHERE id = ?', [batchId]);
+        
+        // Log the inventory change
+        await connection.query(
+            'INSERT INTO inventory_logs (product_id, action_type, quantity_changed, quantity_before, quantity_after, user_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [
+                batch.product_id, 
+                'adjustment', 
+                -batch.quantity, 
+                quantity_before, 
+                quantity_after, 
+                user_id, 
+                `Deleted batch #${batchId} (Expiry: ${batch.expiry_date})`
+            ]
+        );
+        
+        // Log activity
+        await logActivity(
+            user_id, 
+            'delete_batch', 
+            `Deleted batch #${batchId} for ${batch.product_name} (${batch.quantity} units, Expiry: ${batch.expiry_date})`
+        );
+        
+        await connection.commit();
+        res.json({ success: true, message: 'Batch deleted successfully' });
+        
+    } catch (error) {
+        await connection.rollback();
+        console.error('Delete batch error:', error);
         res.status(500).json({ success: false, message: error.message });
     } finally {
         connection.release();
@@ -750,6 +960,21 @@ app.post('/api/setup/create-tables', async (req, res) => {
             )
         `);
 
+         await connection.query(`
+           CREATE TABLE IF NOT EXISTS stock_batches (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    product_id INT NOT NULL,
+    batch_code VARCHAR(50) NULL DEFAULT NULL,
+    quantity INT NOT NULL,
+    received_date DATE DEFAULT (CURRENT_DATE),
+    expiry_date DATE NULL,
+    supplier VARCHAR(100) NULL,
+    notes TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+)
+        `);
+
         await connection.commit();
         connection.release();
         await tempPool.end();
@@ -793,22 +1018,36 @@ app.post('/api/setup/import-data', async (req, res) => {
         }
 
         const [existingProducts] = await connection.query('SELECT COUNT(*) as count FROM products');
-        
-        if (existingProducts[0].count === 0) {
-            await connection.query(`
-                INSERT INTO products (name, category, price, cost, stock_quantity, reorder_level, expiry_date) VALUES
-                ('Fried Chicken', 'Main Course', 85.00, 45.00, 50, 10, DATE_ADD(CURDATE(), INTERVAL 7 DAY)),
-                ('Pork Adobo', 'Main Course', 75.00, 40.00, 40, 10, DATE_ADD(CURDATE(), INTERVAL 5 DAY)),
-                ('Beef Tapa', 'Main Course', 95.00, 55.00, 30, 10, DATE_ADD(CURDATE(), INTERVAL 6 DAY)),
-                ('Pancit Canton', 'Main Course', 60.00, 30.00, 45, 10, DATE_ADD(CURDATE(), INTERVAL 4 DAY)),
-                ('Steamed Rice', 'Side Dish', 15.00, 5.00, 200, 50, DATE_ADD(CURDATE(), INTERVAL 3 DAY)),
-                ('Bottled Water', 'Beverages', 20.00, 10.00, 100, 20, DATE_ADD(CURDATE(), INTERVAL 30 DAY)),
-                ('Soft Drinks', 'Beverages', 30.00, 15.00, 80, 20, DATE_ADD(CURDATE(), INTERVAL 60 DAY)),
-                ('Iced Tea', 'Beverages', 25.00, 12.00, 60, 15, DATE_ADD(CURDATE(), INTERVAL 14 DAY)),
-                ('Banana Cake', 'Desserts', 35.00, 18.00, 25, 10, DATE_ADD(CURDATE(), INTERVAL 2 DAY)),
-                ('Leche Flan', 'Desserts', 40.00, 20.00, 20, 10, DATE_ADD(CURDATE(), INTERVAL 3 DAY))
-            `);
-        }
+
+if (existingProducts[0].count === 0) {
+    // Insert sample products
+    await connection.query(`
+        INSERT INTO products (name, category, price, cost, stock_quantity, reorder_level, expiry_date) VALUES
+        ('Fried Chicken', 'Main Course', 85.00, 45.00, 50, 10, DATE_ADD(CURDATE(), INTERVAL 7 DAY)),
+        ('Pork Adobo', 'Main Course', 75.00, 40.00, 40, 10, DATE_ADD(CURDATE(), INTERVAL 5 DAY)),
+        ('Beef Tapa', 'Main Course', 95.00, 55.00, 30, 10, DATE_ADD(CURDATE(), INTERVAL 6 DAY)),
+        ('Pancit Canton', 'Main Course', 60.00, 30.00, 45, 10, DATE_ADD(CURDATE(), INTERVAL 4 DAY)),
+        ('Steamed Rice', 'Side Dish', 15.00, 5.00, 200, 50, DATE_ADD(CURDATE(), INTERVAL 3 DAY)),
+        ('Bottled Water', 'Beverages', 20.00, 10.00, 100, 20, DATE_ADD(CURDATE(), INTERVAL 30 DAY)),
+        ('Soft Drinks', 'Beverages', 30.00, 15.00, 80, 20, DATE_ADD(CURDATE(), INTERVAL 60 DAY)),
+        ('Iced Tea', 'Beverages', 25.00, 12.00, 60, 15, DATE_ADD(CURDATE(), INTERVAL 14 DAY)),
+        ('Banana Cake', 'Desserts', 35.00, 18.00, 25, 10, DATE_ADD(CURDATE(), INTERVAL 2 DAY)),
+        ('Leche Flan', 'Desserts', 40.00, 20.00, 20, 10, DATE_ADD(CURDATE(), INTERVAL 3 DAY))
+    `);
+    
+    // Create initial stock batches for all sample products
+    await connection.query(`
+        INSERT INTO stock_batches (product_id, batch_code, quantity, expiry_date, notes)
+        SELECT 
+            id,
+            CONCAT('BATCH-', LPAD(id, 4, '0')),
+            stock_quantity,
+            expiry_date,
+            'Initial sample stock batch'
+        FROM products
+        WHERE id >= 1 AND id <= 10
+    `);
+}
 
         await connection.commit();
         connection.release();
@@ -827,10 +1066,23 @@ app.post('/api/setup/import-data', async (req, res) => {
 
 // ==================== SERVE FRONTEND ====================
 
-app.get('*', (req, res) => {
+// Serve specific HTML pages
+app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
+app.get('/login.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.get('/register.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'register.html'));
+});
+
+// Catch-all for other routes - redirect to login
+app.get('*', (req, res) => {
+    res.redirect('/login.html');
+});
 console.log('✅ All routes configured');
 
 // Start server

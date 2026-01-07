@@ -19,13 +19,16 @@
             transform: scale(1.05);
             border-color: #667eea;
         }
-        .product-card.out-of-stock {
+        .product-card.out-of-stock, .product-card.expired {
             opacity: 0.5;
             cursor: not-allowed;
         }
-        .product-card.out-of-stock:hover {
+        .product-card.out-of-stock:hover, .product-card.expired:hover {
             transform: none;
             border-color: transparent;
+        }
+        .product-card.expired {
+            border: 2px solid #dc3545 !important;
         }
         .stock-badge {
             position: absolute;
@@ -44,6 +47,10 @@
         }
         .stock-ok {
             background-color: #28a745;
+            color: #fff;
+        }
+        .expired-badge {
+            background-color: #dc3545;
             color: #fff;
         }
         .cart-section {
@@ -81,10 +88,6 @@
         .stock-info {
             font-size: 0.85rem;
             color: #6c757d;
-        }
-        .stock-warning {
-            color: #dc3545;
-            font-weight: bold;
         }
     </style>
 </head>
@@ -212,10 +215,12 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const API_URL = 'http://localhost:3000/api';
         let user = null;
         let products = [];
+        let batches = [];
         let cart = [];
         let currentCategory = 'all';
 
@@ -234,8 +239,15 @@
             try {
                 const res = await fetch(`${API_URL}/products`);
                 const data = await res.json();
+                
+                const batchesRes = await fetch(`${API_URL}/inventory/batches`);
+                const batchesData = await batchesRes.json();
+                
                 if (data.success) {
                     products = data.products;
+                    batches = batchesData.success ? batchesData.batches : [];
+                    console.log('Loaded products:', products.length);
+                    console.log('Loaded batches:', batches.length);
                     displayProducts(products);
                 } else {
                     document.getElementById('productsGrid').innerHTML = '<p class="text-danger">Error loading products.</p>';
@@ -246,17 +258,50 @@
             }
         }
 
+        function isExpired(expiryDate) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const expiry = new Date(expiryDate);
+            expiry.setHours(0, 0, 0, 0);
+            return expiry < today;
+        }
+
         function getAvailableStock(productId) {
-            const product = products.find(p => p.id === productId);
-            if (!product) return 0;
+            // Get all non-expired batches for this product
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
             
+            const productBatches = batches.filter(b => b.product_id === productId && b.quantity > 0);
+            
+            let nonExpiredStock = 0;
+            productBatches.forEach(batch => {
+                const expiryDate = new Date(batch.expiry_date);
+                expiryDate.setHours(0, 0, 0, 0);
+                
+                // Only count if not expired
+                if (expiryDate >= today) {
+                    nonExpiredStock += batch.quantity;
+                }
+            });
+            
+            // Subtract what's already in cart
             const cartItem = cart.find(i => i.id === productId);
             const inCart = cartItem ? cartItem.quantity : 0;
             
-            return product.stock_quantity - inCart;
+            return Math.max(0, nonExpiredStock - inCart);
         }
 
-        function getStockBadgeClass(stock) {
+        function hasNonExpiredStock(productId) {
+            const availableStock = getAvailableStock(productId);
+            const cartItem = cart.find(i => i.id === productId);
+            const inCart = cartItem ? cartItem.quantity : 0;
+            
+            // Add back cart quantity to check if there's any non-expired stock at all
+            return (availableStock + inCart) > 0;
+        }
+
+        function getStockBadgeClass(stock, hasExpired) {
+            if (hasExpired) return 'expired-badge';
             if (stock === 0) return 'stock-out';
             if (stock <= 10) return 'stock-low';
             return 'stock-ok';
@@ -271,26 +316,55 @@
             }
 
             list.forEach(p => {
+                const hasNonExpired = hasNonExpiredStock(p.id);
                 const availableStock = getAvailableStock(p.id);
-                const isOutOfStock = availableStock === 0;
+                const isOutOfStock = !hasNonExpired || availableStock === 0;
                 
                 const col = document.createElement('div');
                 col.className = 'col-md-4 mb-3';
+                
+                let statusMessage = '';
+                let cardClass = 'product-card';
+                
+                // Check if product has batches
+                const productBatches = batches.filter(b => b.product_id === p.id && b.quantity > 0);
+                
+                if (productBatches.length === 0) {
+                    statusMessage = '<p class="text-warning mt-2 mb-0"><small>⚠️ No Stock Batches</small></p>';
+                    cardClass += ' out-of-stock';
+                } else if (!hasNonExpired) {
+                    statusMessage = '<p class="text-danger mt-2 mb-0"><small>⚠️ All Stock Expired</small></p>';
+                    cardClass += ' expired';
+                } else if (availableStock === 0) {
+                    statusMessage = '<p class="text-danger mt-2 mb-0"><small>Out of Stock</small></p>';
+                    cardClass += ' out-of-stock';
+                }
+                
+                // Determine badge text
+                let badgeText = '';
+                if (productBatches.length === 0) {
+                    badgeText = 'NO BATCHES';
+                } else if (!hasNonExpired) {
+                    badgeText = 'EXPIRED';
+                } else {
+                    badgeText = 'Stock: ' + availableStock;
+                }
+                
                 col.innerHTML = `
-                    <div class="card product-card ${isOutOfStock ? 'out-of-stock' : ''}">
-                        <span class="badge ${getStockBadgeClass(availableStock)} stock-badge">
-                            Stock: ${availableStock}
+                    <div class="card ${cardClass}">
+                        <span class="badge ${getStockBadgeClass(availableStock, !hasNonExpired)} stock-badge">
+                            ${badgeText}
                         </span>
                         <div class="card-body text-center">
                             <h6>${p.name}</h6>
                             <p class="text-muted mb-1">${p.category}</p>
                             <strong>₱${parseFloat(p.price).toFixed(2)}</strong>
-                            ${isOutOfStock ? '<p class="text-danger mt-2 mb-0"><small>Out of Stock</small></p>' : ''}
+                            ${statusMessage}
                         </div>
                     </div>
                 `;
                 
-                if (!isOutOfStock) {
+                if (!isOutOfStock && hasNonExpired) {
                     col.querySelector('.product-card').addEventListener('click', () => addToCart(p.id));
                 }
                 
@@ -311,10 +385,16 @@
             const product = products.find(p => p.id === id);
             if (!product) return;
 
+            const hasNonExpired = hasNonExpiredStock(id);
+            if (!hasNonExpired) {
+                showError(`${product.name} cannot be sold`, 'All stock for this product has expired. Please remove expired batches from inventory.');
+                return;
+            }
+
             const availableStock = getAvailableStock(id);
             
             if (availableStock <= 0) {
-                showError(`${product.name} is out of stock!`, `Only ${product.stock_quantity} units available and all are already in your cart.`);
+                showError(`${product.name} is out of stock!`, `No more non-expired stock available.`);
                 return;
             }
 
@@ -339,7 +419,7 @@
 
             cartDiv.innerHTML = cart.map(item => {
                 const availableStock = getAvailableStock(item.id);
-                const maxStock = item.stock_quantity;
+                const product = products.find(p => p.id === item.id);
                 
                 return `
                     <div class="cart-item d-flex justify-content-between align-items-center">
@@ -355,7 +435,6 @@
                                 class="form-control qty-input" 
                                 value="${item.quantity}" 
                                 min="1"
-                                max="${maxStock}"
                                 onchange="setQuantity(${item.id}, this.value)"
                                 onclick="this.select()"
                             >
@@ -374,11 +453,11 @@
             if (!item) return;
             
             const newQuantity = item.quantity + delta;
+            const availableStock = getAvailableStock(id);
             const product = products.find(p => p.id === id);
             
-            // Trying to increase quantity
-            if (delta > 0 && newQuantity > product.stock_quantity) {
-                showError(`Cannot add more ${product.name}`, `Maximum available stock: ${product.stock_quantity} units. You already have ${item.quantity} in cart.`);
+            if (delta > 0 && availableStock <= 0) {
+                showError(`Cannot add more ${product.name}`, `No more non-expired stock available.`);
                 return;
             }
             
@@ -396,6 +475,7 @@
             const item = cart.find(i => i.id === id);
             if (!item) return;
             
+            const availableStock = getAvailableStock(id);
             const product = products.find(p => p.id === id);
             const newQuantity = parseInt(value);
             
@@ -405,9 +485,10 @@
                 return;
             } 
             
-            if (newQuantity > product.stock_quantity) {
-                showError(`Quantity exceeds available stock for ${product.name}`, `Maximum available: ${product.stock_quantity} units. Please enter a valid quantity.`);
-                item.quantity = Math.min(item.quantity, product.stock_quantity);
+            const maxAvailable = availableStock + item.quantity;
+            if (newQuantity > maxAvailable) {
+                showError(`Quantity exceeds available stock for ${product.name}`, `Maximum non-expired stock available: ${maxAvailable} units.`);
+                item.quantity = Math.min(item.quantity, maxAvailable);
             } else {
                 item.quantity = newQuantity;
             }
@@ -446,11 +527,16 @@
                 return;
             }
 
-            // Validate stock availability before checkout
             for (const item of cart) {
-                const product = products.find(p => p.id === item.id);
-                if (item.quantity > product.stock_quantity) {
-                    showError(`Insufficient stock for ${item.name}`, `Only ${product.stock_quantity} units available. Please adjust your cart.`);
+                const hasNonExpired = hasNonExpiredStock(item.id);
+                if (!hasNonExpired) {
+                    showError(`Cannot sell ${item.name}`, 'This product has expired. Please remove it from cart.');
+                    return;
+                }
+                
+                const availableStock = getAvailableStock(item.id);
+                if (item.quantity > availableStock + item.quantity) {
+                    showError(`Insufficient stock for ${item.name}`, `Only ${availableStock} non-expired units available.`);
                     return;
                 }
             }
@@ -490,7 +576,6 @@
                     showReceipt(data.sale_id, cart, total, amountPaid, data.change_amount);
                     clearCart();
                     document.getElementById('amountPaid').value = '';
-                    // Reload products to get updated stock
                     await loadProducts();
                     showSuccess('Sale completed successfully!');
                 } else {
@@ -587,7 +672,6 @@
             window.location.href = 'login.html';
         }
 
-        // Error and Success Modal Functions
         function showError(title, message) {
             document.getElementById('errorTitle').textContent = title;
             document.getElementById('errorMessage').textContent = message;
@@ -599,13 +683,10 @@
             const successModal = new bootstrap.Modal(document.getElementById('successModal'));
             successModal.show();
             
-            // Auto-close
             setTimeout(() => {
                 successModal.hide();
             }, 2000);
         }
     </script>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
