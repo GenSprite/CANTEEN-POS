@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Activity Logs - Canteen POS</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <style>
+    body { background-color: #f8f9fa; }
+    .navbar { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .content-card {
+      background: white;
+      border-radius: 15px;
+      padding: 25px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    .log-badge {
+      font-size: 0.75rem;
+      padding: 4px 8px;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-dark">
+    <div class="container-fluid">
+      <span class="navbar-brand mb-0 h1">📋 Activity Logs</span>
+      <div class="d-flex align-items-center text-white">
+        <span class="me-3" id="userInfo"></span>
+        <a href="dashboard.html" class="btn btn-light btn-sm me-2">← Dashboard</a>
+        <button class="btn btn-light btn-sm" onclick="logout()">Logout</button>
+
+      </div>
+    </div>
+</nav>
+
+
+  <div class="container-fluid mt-4">
+    <div class="content-card">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4>System Activity Logs</h4>
+        <div>
+          <button class="btn btn-primary btn-sm" onclick="loadLogs()">🔄 Refresh</button>
+          <button class="btn btn-success btn-sm" onclick="exportLogs()">📥 Export CSV</button>
+        </div>
+      </div>
+
+      <div class="row mb-3">
+        <div class="col-md-3">
+          <label class="form-label">Filter by User</label>
+          <select class="form-select" id="filterUser" onchange="applyFilters()">
+            <option value="">All Users</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Filter by Action</label>
+          <select class="form-select" id="filterAction" onchange="applyFilters()">
+            <option value="">All Actions</option>
+            <option value="login">Login</option>
+            <option value="create_sale">Create Sale</option>
+            <option value="add_product">Add Product</option>
+            <option value="update_product">Update Product</option>
+            <option value="delete_product">Delete Product</option>
+            <option value="inventory_adjustment">Inventory Adjustment</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Start Date</label>
+          <input type="date" class="form-control" id="startDate" onchange="applyFilters()">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">End Date</label>
+          <input type="date" class="form-control" id="endDate" onchange="applyFilters()">
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Date & Time</th>
+              <th>User</th>
+              <th>Role</th>
+              <th>Action</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="logsTable">
+            <tr>
+              <td colspan="5" class="text-center">Loading...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3000/api';
+    let user = null;
+    let allLogs = [];
+    let filteredLogs = [];
+
+    // Check authentication on page load
+    window.onload = () => {
+      console.log('Page loaded, checking authentication...');
+      
+      const storedUser = localStorage.getItem('user');
+      console.log('Stored user:', storedUser);
+      
+      if (!storedUser) {
+        console.log('No user found, redirecting to login');
+        window.location.href = 'login.html';
+        return;
+      }
+
+      try {
+        user = JSON.parse(storedUser);
+        console.log('Parsed user:', user);
+        
+        if (!user || !user.id || !user.role) {
+          console.error('Invalid user data');
+          localStorage.removeItem('user');
+          window.location.href = 'login.html';
+          return;
+        }
+
+        
+        // Set default dates
+        const today = new Date();
+        const weekAgo = new Date(today);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        
+        document.getElementById('endDate').valueAsDate = today;
+        document.getElementById('startDate').valueAsDate = weekAgo;
+        
+        // Load logs
+        console.log('Loading logs...');
+        loadLogs();
+        
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        localStorage.removeItem('user');
+        window.location.href = 'login.html';
+      }
+    };
+
+    async function loadLogs() {
+      try {
+        console.log('Fetching logs from API...');
+        const response = await fetch(`${API_URL}/activity-logs`);
+        const data = await response.json();
+        console.log('Logs response:', data);
+
+        if (data.success) {
+          allLogs = data.logs;
+          populateUserFilter(data.logs);
+          applyFilters();
+        } else {
+          document.getElementById('logsTable').innerHTML = 
+            '<tr><td colspan="5" class="text-center text-danger">Failed to load logs</td></tr>';
+        }
+      } catch (error) {
+        console.error('Load logs error:', error);
+        document.getElementById('logsTable').innerHTML = 
+          '<tr><td colspan="5" class="text-center text-danger">Error: ' + error.message + '</td></tr>';
+      }
+    }
+
+    function populateUserFilter(logs) {
+      const userMap = new Map();
+      logs.forEach(log => {
+        if (!userMap.has(log.user_id)) {
+          userMap.set(log.user_id, log.user_name);
+        }
+      });
+      
+      const select = document.getElementById('filterUser');
+      select.innerHTML = '<option value="">All Users</option>';
+      
+      userMap.forEach((name, id) => {
+        const option = document.createElement('option');
+        option.value = id;
+        option.textContent = name;
+        select.appendChild(option);
+      });
+    }
+
+    function applyFilters() {
+      const userFilter = document.getElementById('filterUser').value;
+      const actionFilter = document.getElementById('filterAction').value;
+      const startDate = document.getElementById('startDate').value;
+      const endDate = document.getElementById('endDate').value;
+
+      filteredLogs = allLogs.filter(log => {
+        if (userFilter && log.user_id != userFilter) return false;
+        if (actionFilter && log.action !== actionFilter) return false;
+        
+        const logDate = new Date(log.created_at).toISOString().split('T')[0];
+        if (startDate && logDate < startDate) return false;
+        if (endDate && logDate > endDate) return false;
+        
+        return true;
+      });
+
+      displayLogs(filteredLogs);
+    }
+
+    function displayLogs(logs) {
+      const tbody = document.getElementById('logsTable');
+      
+      if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center">No logs found</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = '';
+      logs.forEach(log => {
+        const row = document.createElement('tr');
+        const timestamp = new Date(log.created_at).toLocaleString('en-US', { 
+          year: 'numeric', month: 'short', day: 'numeric', 
+          hour: '2-digit', minute: '2-digit'
+        });
+
+        row.innerHTML = `
+          <td>${timestamp}</td>
+          <td>${log.user_name}</td>
+          <td><span class="badge bg-secondary">${log.role}</span></td>
+          <td>${formatActionBadge(log.action)}</td>
+          <td>${log.details || '—'}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function formatActionBadge(action) {
+      const actionMap = {
+        'login': { text: 'Login', color: 'info' },
+        'create_sale': { text: 'Sale Created', color: 'success' },
+        'add_product': { text: 'Product Added', color: 'warning' },
+        'update_product': { text: 'Product Updated', color: 'primary' },
+        'delete_product': { text: 'Product Deleted', color: 'danger' },
+        'inventory_adjustment': { text: 'Inventory Adjusted', color: 'secondary' }
+      };
+      
+      const actionInfo = actionMap[action] || { text: action, color: 'secondary' };
+      return `<span class="badge bg-${actionInfo.color} log-badge">${actionInfo.text}</span>`;
+    }
+
+    function exportLogs() {
+      if (filteredLogs.length === 0) {
+        alert('No logs to export');
+        return;
+      }
+
+      let csv = 'Timestamp,User,Role,Action,Details\n';
+      filteredLogs.forEach(log => {
+        const timestamp = new Date(log.created_at).toLocaleString();
+        const details = (log.details || '').replace(/,/g, ';').replace(/"/g, '""');
+        const action = formatAction(log.action);
+        csv += `"${timestamp}","${log.user_name}","${log.role}","${action}","${details}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `activity-logs-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    }
+
+    function formatAction(action) {
+      const actionMap = {
+        'login': 'Login',
+        'create_sale': 'Sale Created',
+        'add_product': 'Product Added',
+        'update_product': 'Product Updated',
+        'delete_product': 'Product Deleted',
+        'inventory_adjustment': 'Inventory Adjusted'
+      };
+      return actionMap[action] || action;
+    }
+
+    function logout() {
+      localStorage.removeItem('user');
+      window.location.href = 'login.html';
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

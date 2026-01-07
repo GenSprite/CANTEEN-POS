@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canteen POS - Setup Wizard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .wizard-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .wizard-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .wizard-body {
+            padding: 40px;
+        }
+        .step {
+            display: none;
+        }
+        .step.active {
+            display: block;
+        }
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+        .step-item {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            background: #e0e0e0;
+            margin: 0 5px;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .step-item.active {
+            background: #667eea;
+            color: white;
+            font-weight: bold;
+        }
+        .step-item.completed {
+            background: #28a745;
+            color: white;
+        }
+        .status-box {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+        }
+        .status-pending {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+        }
+        .status-checking {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+        }
+        .status-success {
+            background: #d4edda;
+            border: 2px solid #28a745;
+        }
+        .status-error {
+            background: #f8d7da;
+            border: 2px solid #dc3545;
+        }
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .btn-wizard {
+            padding: 12px 30px;
+            font-size: 16px;
+        }
+        .success-icon {
+            font-size: 80px;
+            color: #28a745;
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="wizard-container">
+        <div class="wizard-header">
+            <h1>🍽️ Canteen POS Setup Wizard</h1>
+            <p>Let's get your system ready in just a few steps!</p>
+        </div>
+
+        <div class="wizard-body">
+            <!-- Step Indicator -->
+            <div class="step-indicator">
+                <div class="step-item active" id="indicator-1">1. Welcome</div>
+                <div class="step-item" id="indicator-2">2. Requirements</div>
+                <div class="step-item" id="indicator-3">3. Database</div>
+                <div class="step-item" id="indicator-4">4. Complete</div>
+            </div>
+
+            <!-- Step 1: Welcome -->
+            <div class="step active" id="step-1">
+                <h3>👋 Welcome to Canteen POS!</h3>
+                <p class="lead">This wizard will help you set up your system in minutes.</p>
+                
+                <div class="card mt-4">
+                    <div class="card-body">
+                        <h5>What we'll do:</h5>
+                        <ul>
+                            <li>✅ Check if Node.js is installed</li>
+                            <li>✅ Check if MySQL/MariaDB is running</li>
+                            <li>✅ Create the database automatically</li>
+                            <li>✅ Install required packages</li>
+                            <li>✅ Configure your system</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="alert alert-info mt-4">
+                    <strong>⏱️ Time required:</strong> Approximately 2-3 minutes
+                </div>
+
+                <div class="text-center mt-4">
+                    <button class="btn btn-primary btn-lg btn-wizard" onclick="nextStep()">
+                        Let's Get Started! →
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 2: Check Requirements -->
+            <div class="step" id="step-2">
+                <h3>🔍 Checking System Requirements</h3>
+                <p>Please wait while we verify your system...</p>
+
+                <div class="status-box status-pending" id="check-node">
+                    <div class="spinner" style="display: none;"></div>
+                    <span>⏳ Checking Node.js installation...</span>
+                </div>
+
+                <div class="status-box status-pending" id="check-mysql">
+                    <div class="spinner" style="display: none;"></div>
+                    <span>⏳ Checking MySQL/MariaDB connection...</span>
+                </div>
+
+                <div class="status-box status-pending" id="check-packages">
+                    <div class="spinner" style="display: none;"></div>
+                    <span>⏳ Checking npm packages...</span>
+                </div>
+
+                <div id="requirement-errors" class="mt-3" style="display: none;"></div>
+
+                <div class="text-center mt-4">
+                    <button class="btn btn-secondary btn-wizard" onclick="prevStep()">
+                        ← Back
+                    </button>
+                    <button class="btn btn-primary btn-wizard" id="btn-requirements" onclick="checkRequirements()" disabled>
+                        Check Again
+                    </button>
+                    <button class="btn btn-primary btn-wizard" id="btn-next-step2" onclick="nextStep()" style="display: none;">
+                        Continue →
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 3: Database Setup -->
+            <div class="step" id="step-3">
+                <h3>🗄️ Setting Up Database</h3>
+                <p>Creating database and importing initial data...</p>
+
+                <div class="status-box status-pending" id="db-create">
+                    <div class="spinner" style="display: none;"></div>
+                    <span>⏳ Creating database...</span>
+                </div>
+
+                <div class="status-box status-pending" id="db-tables">
+                    <div class="spinner" style="display: none;"></div>
+                    <span>⏳ Creating tables...</span>
+                </div>
+
+                <div class="status-box status-pending" id="db-data">
+                    <div class="spinner" style="display: none;"></div>
+                    <span>⏳ Importing sample data...</span>
+                </div>
+
+                <div id="database-errors" class="mt-3" style="display: none;"></div>
+
+                <div class="text-center mt-4">
+                    <button class="btn btn-secondary btn-wizard" onclick="prevStep()">
+                        ← Back
+                    </button>
+                    <button class="btn btn-primary btn-wizard" id="btn-next-step3" onclick="nextStep()" style="display: none;">
+                        Continue →
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 4: Complete -->
+            <div class="step" id="step-4">
+                <div class="text-center">
+                    <div class="success-icon">🎉</div>
+                    <h2>Setup Complete!</h2>
+                    <p class="lead">Your Canteen POS system is ready to use!</p>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-body">
+                        <h5>📝 Quick Start Guide:</h5>
+                        <ol>
+                            <li>The server will start automatically when you click "Launch System"</li>
+                            <li>Your browser will open to <code>http://localhost:3000</code></li>
+                            <li>Use these default credentials to login:</li>
+                        </ol>
+
+                        <div class="alert alert-success mt-3">
+                            <strong>👤 Default Login Credentials:</strong><br>
+                            <strong>Owner:</strong> owner / password123<br>
+                            <strong>Manager:</strong> manager / password123<br>
+                            <strong>Cashier:</strong> cashier1 / password123
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <strong>⚠️ Security Note:</strong> Please change these passwords after your first login!
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-center mt-4">
+                    <button class="btn btn-success btn-lg btn-wizard" onclick="launchSystem()">
+                        🚀 Launch System
+                    </button>
+                </div>
+
+                <div class="text-center mt-3">
+                    <small class="text-muted">
+                        Need help? Check the README.md file or contact support.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        const totalSteps = 4;
+
+        function showStep(stepNum) {
+            // Hide all steps
+            document.querySelectorAll('.step').forEach(step => {
+                step.classList.remove('active');
+            });
+
+            // Show current step
+            document.getElementById(`step-${stepNum}`).classList.add('active');
+
+            // Update indicators
+            for (let i = 1; i <= totalSteps; i++) {
+                const indicator = document.getElementById(`indicator-${i}`);
+                indicator.classList.remove('active', 'completed');
+                
+                if (i < stepNum) {
+                    indicator.classList.add('completed');
+                } else if (i === stepNum) {
+                    indicator.classList.add('active');
+                }
+            }
+
+            currentStep = stepNum;
+
+            // Auto-check requirements on step 2
+            if (stepNum === 2) {
+                setTimeout(checkRequirements, 500);
+            }
+
+            // Auto-setup database on step 3
+            if (stepNum === 3) {
+                setTimeout(setupDatabase, 500);
+            }
+        }
+
+        function nextStep() {
+            if (currentStep < totalSteps) {
+                showStep(currentStep + 1);
+            }
+        }
+
+        function prevStep() {
+            if (currentStep > 1) {
+                showStep(currentStep - 1);
+            }
+        }
+
+        async function checkRequirements() {
+            // Check Node.js
+            await checkItem('check-node', 'Checking Node.js...', async () => {
+                const response = await fetch('/api/setup/check-node');
+                const data = await response.json();
+                if (data.success) {
+                    return `✅ Node.js ${data.version} installed`;
+                }
+                throw new Error('Node.js not found');
+            });
+
+            // Check MySQL
+            await checkItem('check-mysql', 'Checking MySQL connection...', async () => {
+                const response = await fetch('/api/setup/check-mysql');
+                const data = await response.json();
+                if (data.success) {
+                    return '✅ MySQL/MariaDB is running';
+                }
+                throw new Error('MySQL connection failed');
+            });
+
+            // Check packages
+            await checkItem('check-packages', 'Checking npm packages...', async () => {
+                const response = await fetch('/api/setup/check-packages');
+                const data = await response.json();
+                if (data.success) {
+                    return '✅ All packages installed';
+                }
+                throw new Error('Missing packages');
+            });
+
+            // All checks passed
+            document.getElementById('btn-next-step2').style.display = 'inline-block';
+        }
+
+        async function setupDatabase() {
+            // Create database
+            await checkItem('db-create', 'Creating database...', async () => {
+                const response = await fetch('/api/setup/create-database', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    return '✅ Database created';
+                }
+                throw new Error(data.message);
+            });
+
+            // Create tables
+            await checkItem('db-tables', 'Creating tables...', async () => {
+                const response = await fetch('/api/setup/create-tables', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    return '✅ Tables created';
+                }
+                throw new Error(data.message);
+            });
+
+            // Import data
+            await checkItem('db-data', 'Importing sample data...', async () => {
+                const response = await fetch('/api/setup/import-data', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    return '✅ Sample data imported';
+                }
+                throw new Error(data.message);
+            });
+
+            // All done
+            document.getElementById('btn-next-step3').style.display = 'inline-block';
+        }
+
+        async function checkItem(elementId, message, checkFunction) {
+            const element = document.getElementById(elementId);
+            const spinner = element.querySelector('.spinner');
+            const textElement = element.querySelector('span');
+            
+            // Show checking state
+            element.className = 'status-box status-checking';
+            spinner.style.display = 'block';
+            textElement.textContent = message;
+
+            try {
+                await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
+                const result = await checkFunction();
+                
+                // Show success
+                element.className = 'status-box status-success';
+                spinner.style.display = 'none';
+                textElement.textContent = result;
+            } catch (error) {
+                // Show error
+                element.className = 'status-box status-error';
+                spinner.style.display = 'none';
+                textElement.textContent = '❌ ' + error.message;
+                
+                // Show retry button
+                document.getElementById('btn-requirements').disabled = false;
+            }
+        }
+
+        function launchSystem() {
+            // Open the main application
+            window.location.href = '/login.html';
+        }
+
+        // Start wizard
+        showStep(1);
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

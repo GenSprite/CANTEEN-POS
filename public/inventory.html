@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inventory - Canteen POS</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"rel="stylesheet"/>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+    .navbar {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .content-card {
+      background: white;
+      border-radius: 15px;
+      padding: 25px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+    }
+    .low-stock {
+      background-color: #fff3cd;
+    }
+    .expiring-soon {
+      background-color: #f8d7da;
+    }
+    .stock-batch {
+      font-size: 0.85rem;
+      padding: 4px 8px;
+      margin: 2px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+    .batch-fresh {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    .batch-warning {
+      background-color: #fff3cd;
+      color: #856404;
+    }
+    .batch-danger {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    .batch-list {
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-dark">
+    <div class="container-fluid">
+      <span class="navbar-brand mb-0 h1">📦 Inventory Management</span>
+      <div class="d-flex align-items-center text-white">
+        <span class="me-3" id="userInfo"></span>
+        <a href="dashboard.html" class="btn btn-light btn-sm me-2">Dashboard</a>
+        <button class="btn btn-light btn-sm me-2" onclick="logout()">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-fluid mt-4">
+    <div class="content-card">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4>Product Inventory</h4>
+        <button class="btn btn-primary" onclick="showAddModal()" id="addBtn">
+          + Add Product
+        </button>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Price</th>
+              <th>Total Stock</th>
+              <th>Reorder Level</th>
+              <th>Stock Batches</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryTable">
+            <tr>
+              <td colspan="7" class="text-center">Loading...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Product -->
+  <div class="modal fade" id="productModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalTitle">Add Product</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="productForm">
+            <input type="hidden" id="productId" />
+            <div class="mb-3">
+              <label class="form-label">Product Name</label>
+              <input type="text" class="form-control" id="productName" required />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Category</label>
+              <select class="form-select" id="productCategory" required>
+                <option value="Main Course">Main Course</option>
+                <option value="Side Dish">Side Dish</option>
+                <option value="Beverages">Beverages</option>
+                <option value="Desserts">Desserts</option>
+              </select>
+            </div>
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Price</label>
+                <input type="number" class="form-control" id="productPrice" step="0.01" required />
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Cost</label>
+                <input type="number" class="form-control" id="productCost" step="0.01" required />
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Initial Stock Quantity</label>
+                <input type="number" class="form-control" id="productStock" required />
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Reorder Level</label>
+                <input type="number" class="form-control" id="productReorder" required />
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Expiry Date</label>
+              <input type="date" class="form-control" id="productExpiry" />
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Save</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Stock Modal -->
+  <div class="modal fade" id="addStockModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+          <h5 class="modal-title">📦 Add Stock</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-info">
+            <strong id="addStockProductName"></strong>
+            <p class="mb-0 mt-2">Current Total Stock: <strong id="addStockCurrentQty">0</strong> units</p>
+          </div>
+          <form id="addStockForm">
+            <input type="hidden" id="addStockProductId" />
+            <div class="mb-3">
+              <label class="form-label">Quantity to Add</label>
+              <input type="number" class="form-control" id="addStockQuantity" min="1" required />
+              <small class="text-muted">Enter the number of units you want to add to inventory</small>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Expiration Date</label>
+              <input type="date" class="form-control" id="addStockExpiry" required />
+              <small class="text-muted">Set the expiration date for this new stock batch</small>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Notes (Optional)</label>
+              <textarea class="form-control" id="addStockNotes" rows="2" placeholder="e.g., Supplier: ABC Trading, Invoice #123"></textarea>
+            </div>
+            <button type="submit" class="btn btn-success w-100">Add Stock</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Stock Batches Modal -->
+  <div class="modal fade" id="viewBatchesModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">📋 Stock Batches - <span id="batchProductName"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Batch ID</th>
+                  <th>Quantity</th>
+                  <th>Expiry Date</th>
+                  <th>Days Left</th>
+                  <th>Added On</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="batchesTableBody">
+                <tr>
+                  <td colspan="6" class="text-center">Loading...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const API_URL = "http://localhost:3000/api";
+    const inventoryTable = document.getElementById("inventoryTable");
+    const productModal = new bootstrap.Modal(document.getElementById("productModal"));
+    const addStockModal = new bootstrap.Modal(document.getElementById("addStockModal"));
+    const viewBatchesModal = new bootstrap.Modal(document.getElementById("viewBatchesModal"));
+    const user = JSON.parse(localStorage.getItem("user"));
+
+    function logout() {
+      localStorage.removeItem("user");
+      window.location.href = "login.html";
+    }
+
+    function applyRolePermissions() {
+      document.getElementById("userInfo").innerText = `${user.full_name} (${user.role})`;
+      const addBtn = document.getElementById("addBtn");
+      if (user.role === "cashier") addBtn.style.display = "none";
+    }
+
+    function renderActionButtons(p) {
+      if (user.role === "owner") {
+        return `
+          <button class="btn btn-sm btn-success me-1" onclick="showAddStockModal(${p.id}, '${p.name.replace(/'/g, "\\'")}', ${p.stock_quantity})" title="Add Stock">+ Stock</button>
+          <button class="btn btn-sm btn-warning me-1" onclick="editProduct(${p.id})">Edit</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteProduct(${p.id})">Delete</button>
+        `;
+      } else if (user.role === "manager") {
+        return `
+          <button class="btn btn-sm btn-success me-1" onclick="showAddStockModal(${p.id}, '${p.name.replace(/'/g, "\\'")}', ${p.stock_quantity})" title="Add Stock">+ Stock</button>
+          <button class="btn btn-sm btn-warning" onclick="editProduct(${p.id})">Edit</button>
+        `;
+      } else {
+        return `<span class="text-muted">View Only</span>`;
+      }
+    }
+
+    async function loadProducts() {
+      try {
+        const res = await fetch(`${API_URL}/products`);
+        const data = await res.json();
+        if (!data.success) throw new Error("Error loading products");
+        
+        // Load stock batches for all products
+        const batchesRes = await fetch(`${API_URL}/inventory/batches`);
+        const batchesData = await batchesRes.json();
+        const batches = batchesData.success ? batchesData.batches : [];
+        
+        displayProducts(data.products, batches);
+      } catch (err) {
+        console.error(err);
+        inventoryTable.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error loading products</td></tr>`;
+      }
+    }
+
+    function getDaysUntilExpiry(expiryDate) {
+      if (!expiryDate) return null;
+      const today = new Date();
+      const expiry = new Date(expiryDate);
+      const diffTime = expiry - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays;
+    }
+
+    function getBatchClass(daysLeft) {
+      if (daysLeft < 0) return 'batch-danger';
+      if (daysLeft <= 7) return 'batch-danger';
+      if (daysLeft <= 14) return 'batch-warning';
+      return 'batch-fresh';
+    }
+
+    function displayProducts(products, batches) {
+      if (products.length === 0) {
+        inventoryTable.innerHTML = `<tr><td colspan="7" class="text-center">No products available.</td></tr>`;
+        return;
+      }
+
+      inventoryTable.innerHTML = "";
+      const today = new Date();
+
+      products.forEach((p) => {
+        const productBatches = batches.filter(b => b.product_id === p.id && b.quantity > 0);
+        const expiryDate = p.expiry_date ? new Date(p.expiry_date) : null;
+        const row = document.createElement("tr");
+
+        if (p.stock_quantity <= p.reorder_level) row.classList.add("low-stock");
+        if (expiryDate && expiryDate - today <= 7 * 24 * 60 * 60 * 1000)
+          row.classList.add("expiring-soon");
+
+        // Create batch display
+        let batchDisplay = '<div class="batch-list">';
+        if (productBatches.length > 0) {
+          productBatches.forEach(batch => {
+            const daysLeft = getDaysUntilExpiry(batch.expiry_date);
+            const batchClass = getBatchClass(daysLeft);
+            const statusText = daysLeft < 0 ? 'EXPIRED' : daysLeft <= 7 ? `${daysLeft}d left` : `${daysLeft}d`;
+            batchDisplay += `<span class="stock-batch ${batchClass}">${batch.quantity} units - ${statusText}</span>`;
+          });
+          batchDisplay += `<br><button class="btn btn-sm btn-link p-0 mt-1" onclick="viewBatches(${p.id}, '${p.name.replace(/'/g, "\\'")}')">View Details</button>`;
+        } else {
+          batchDisplay += '<span class="text-muted">No batches</span>';
+        }
+        batchDisplay += '</div>';
+
+        row.innerHTML = `
+          <td>${p.name}</td>
+          <td>${p.category}</td>
+          <td>₱${parseFloat(p.price).toFixed(2)}</td>
+          <td><strong>${p.stock_quantity}</strong></td>
+          <td>${p.reorder_level}</td>
+          <td>${batchDisplay}</td>
+          <td>${renderActionButtons(p)}</td>
+        `;
+        inventoryTable.appendChild(row);
+      });
+    }
+
+    document.getElementById("productForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      if (user.role === "cashier") {
+        alert("You are not authorized to perform this action.");
+        return;
+      }
+
+      const id = document.getElementById("productId").value;
+      const productData = {
+        name: document.getElementById("productName").value,
+        category: document.getElementById("productCategory").value,
+        price: parseFloat(document.getElementById("productPrice").value),
+        cost: parseFloat(document.getElementById("productCost").value),
+        stock_quantity: parseInt(document.getElementById("productStock").value),
+        reorder_level: parseInt(document.getElementById("productReorder").value),
+        expiry_date: document.getElementById("productExpiry").value || null,
+        user_id: user.id
+      };
+
+      const method = id ? "PUT" : "POST";
+      const url = id ? `${API_URL}/products/${id}` : `${API_URL}/products`;
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(productData),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        productModal.hide();
+        loadProducts();
+      } else {
+        alert("Error saving product");
+      }
+    });
+
+    async function editProduct(id) {
+      if (user.role === "cashier") {
+        alert("You are not authorized to edit products.");
+        return;
+      }
+
+      const res = await fetch(`${API_URL}/products/${id}`);
+      const data = await res.json();
+      if (!data.success) return alert("Product not found");
+
+      const p = data.product;
+      document.getElementById("productId").value = p.id;
+      document.getElementById("productName").value = p.name;
+      document.getElementById("productCategory").value = p.category;
+      document.getElementById("productPrice").value = p.price;
+      document.getElementById("productCost").value = p.cost;
+      document.getElementById("productStock").value = p.stock_quantity;
+      document.getElementById("productReorder").value = p.reorder_level;
+      document.getElementById("productExpiry").value = p.expiry_date
+        ? p.expiry_date.split("T")[0]
+        : "";
+      document.getElementById("modalTitle").innerText = "Edit Product";
+      productModal.show();
+    }
+
+    async function deleteProduct(id) {
+      if (user.role !== "owner") {
+        alert("Only the Owner can delete products.");
+        return;
+      }
+
+      if (!confirm("Are you sure you want to delete this product?")) return;
+      const res = await fetch(`${API_URL}/products/${id}`, { 
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: user.id })
+      });
+      const data = await res.json();
+      if (data.success) loadProducts();
+      else alert("Error deleting product");
+    }
+
+    function showAddModal() {
+      if (user.role === "cashier") {
+        alert("You are not authorized to add products.");
+        return;
+      }
+      document.getElementById("productForm").reset();
+      document.getElementById("modalTitle").innerText = "Add Product";
+      document.getElementById("productId").value = "";
+      productModal.show();
+    }
+
+    function showAddStockModal(productId, productName, currentStock) {
+      if (user.role === "cashier") {
+        alert("You are not authorized to add stock.");
+        return;
+      }
+      
+      document.getElementById("addStockProductId").value = productId;
+      document.getElementById("addStockProductName").textContent = productName;
+      document.getElementById("addStockCurrentQty").textContent = currentStock;
+      document.getElementById("addStockForm").reset();
+      
+      // Set minimum date to today
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById("addStockExpiry").setAttribute('min', today);
+      
+      addStockModal.show();
+    }
+
+    document.getElementById("addStockForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const productId = document.getElementById("addStockProductId").value;
+      const quantity = parseInt(document.getElementById("addStockQuantity").value);
+      const expiryDate = document.getElementById("addStockExpiry").value;
+      const notes = document.getElementById("addStockNotes").value;
+
+      try {
+        const res = await fetch(`${API_URL}/inventory/add-stock`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            product_id: productId,
+            quantity: quantity,
+            expiry_date: expiryDate,
+            user_id: user.id,
+            notes: notes
+          })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          addStockModal.hide();
+          loadProducts();
+          alert("Stock added successfully!");
+        } else {
+          alert("Error adding stock: " + data.message);
+        }
+      } catch (err) {
+        console.error("Add stock error:", err);
+        alert("Server error while adding stock");
+      }
+    });
+
+    async function viewBatches(productId, productName) {
+      document.getElementById("batchProductName").textContent = productName;
+      document.getElementById("batchesTableBody").innerHTML = '<tr><td colspan="6" class="text-center">Loading...</td></tr>';
+      
+      viewBatchesModal.show();
+
+      try {
+        const res = await fetch(`${API_URL}/inventory/batches/${productId}`);
+        const data = await res.json();
+        
+        if (data.success && data.batches.length > 0) {
+          const tbody = document.getElementById("batchesTableBody");
+          tbody.innerHTML = '';
+          
+          data.batches.forEach(batch => {
+            const daysLeft = getDaysUntilExpiry(batch.expiry_date);
+            const row = document.createElement('tr');
+            
+            let statusBadge = '';
+            if (daysLeft < 0) {
+              statusBadge = '<span class="badge bg-danger">Expired</span>';
+            } else if (daysLeft <= 7) {
+              statusBadge = '<span class="badge bg-danger">Critical</span>';
+            } else if (daysLeft <= 14) {
+              statusBadge = '<span class="badge bg-warning text-dark">Warning</span>';
+            } else {
+              statusBadge = '<span class="badge bg-success">Fresh</span>';
+            }
+            
+            row.innerHTML = `
+              <td>#${batch.id}</td>
+              <td><strong>${batch.quantity}</strong> units</td>
+              <td>${new Date(batch.expiry_date).toLocaleDateString()}</td>
+              <td>${daysLeft >= 0 ? daysLeft + ' days' : 'Expired'}</td>
+              <td>${new Date(batch.created_at).toLocaleDateString()}</td>
+              <td>${statusBadge}</td>
+            `;
+            tbody.appendChild(row);
+          });
+        } else {
+          document.getElementById("batchesTableBody").innerHTML = '<tr><td colspan="6" class="text-center text-muted">No stock batches found</td></tr>';
+        }
+      } catch (err) {
+        console.error("Error loading batches:", err);
+        document.getElementById("batchesTableBody").innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading batches</td></tr>';
+      }
+    }
+
+    applyRolePermissions();
+    loadProducts();
+  </script>
+</body>
+</html>

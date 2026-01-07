@@ -1,0 +1,249 @@
+# 🚀 Canteen POS - Easy Setup Guide
+
+## Quick Start (3 Easy Steps!)
+
+### Step 1: Install Prerequisites
+
+**You only need these 2 things:**
+
+1. **Node.js** (Download from https://nodejs.org/)
+   - Download the LTS version
+   - Install with default settings
+   - Verify: Open Command Prompt and type `node --version`
+
+2. **MySQL/XAMPP** (Download from https://www.apachefriends.org/)
+   - Install XAMPP
+   - Start MySQL from XAMPP Control Panel
+
+---
+
+### Step 2: Run the Setup Wizard
+
+#### Windows:
+1. **Double-click** `RUN_SETUP.bat`
+2. The setup wizard will open in your browser automatically
+
+#### Mac/Linux:
+1. Open Terminal
+2. Navigate to project folder: `cd /path/to/canteen-pos`
+3. Run: `npm install && node server.js`
+4. Open browser: `http://localhost:3000/setup.html`
+
+---
+
+### Step 3: Follow the Wizard
+
+The setup wizard will guide you through 4 simple steps:
+
+**Step 1: Welcome**
+- Introduction to the system
+
+**Step 2: Requirements Check**
+- Automatically checks Node.js ✅
+- Automatically checks MySQL ✅
+- Automatically checks packages ✅
+
+**Step 3: Database Setup**
+- Creates database automatically ✅
+- Creates tables automatically ✅
+- Imports sample data automatically ✅
+
+**Step 4: Complete!**
+- Click "Launch System" to start using!
+
+---
+
+## 🎯 That's It!
+
+After setup completes, you can login with:
+
+| Role | Username | Password |
+|------|----------|----------|
+| Owner | owner | password123 |
+| Manager | manager | password123 |
+| Cashier | cashier1 | password123 |
+
+---
+
+## 📂 Project Structure
+
+After setup, you'll have:
+
+```
+canteen-pos/
+├── public/
+│   ├── setup.html          ← Setup Wizard (run once)
+│   ├── login.html          ← Login Page
+│   ├── dashboard.html      ← Dashboard
+│   ├── sales.html          ← POS System
+│   ├── inventory.html      ← Inventory Management
+│   └── reports.html        ← Reports & Analytics
+├── database/
+│   └── schema.sql          ← Database structure (auto-imported)
+├── server.js               ← Backend server
+├── package.json            ← Dependencies
+├── RUN_SETUP.bat           ← 1-Click Setup (Windows)
+└── README.md               ← Full documentation
+```
+
+---
+
+## 🔧 Troubleshooting
+
+### "Node.js is not installed"
+**Solution:**
+1. Download from https://nodejs.org/
+2. Install with default settings
+3. Restart your computer
+4. Run setup again
+
+### "MySQL connection failed"
+**Solution:**
+1. Open XAMPP Control Panel
+2. Click "Start" next to MySQL
+3. Wait until it shows green
+4. Click "Check Again" in setup wizard
+
+### "Setup wizard won't open"
+**Solution:**
+1. Manually open browser
+2. Go to: `http://localhost:3000/setup.html`
+3. If that doesn't work, check if server is running
+
+### "Port 3000 already in use"
+**Solution:**
+1. Close any other programs using port 3000
+2. Or change port in `server.js` (line 32)
+3. Restart setup
+
+---
+
+## 🌐 After Setup - Running Daily
+
+Once setup is complete, you have two options:
+
+### Option 1: Use the Shortcut (Easiest)
+- Just run `RUN_SETUP.bat` again
+- It will skip setup and go straight to the system
+
+### Option 2: Manual Start
+1. Make sure MySQL is running in XAMPP
+2. Open Command Prompt in project folder
+3. Run: `node server.js`
+4. Open browser: `http://localhost:3000`
+
+---
+
+## 📱 Access from Other Devices (WiFi)
+
+After setup, to use on tablets/phones:
+
+1. **Find your computer's IP:**
+   - Open Command Prompt
+   - Type: `ipconfig`
+   - Note the IPv4 Address (e.g., 192.168.1.100)
+
+2. **Connect from other devices:**
+   - Make sure they're on the same WiFi
+   - Open browser on the device
+   - Go to: `http://YOUR_IP:3000`
+   - Example: `http://192.168.1.100:3000`
+
+---
+
+## 🎓 Features After Setup
+
+You'll have access to:
+
+✅ **POS System** - Fast checkout interface  
+✅ **Inventory Management** - Track stock levels  
+✅ **Expiry Monitoring** - Automatic alerts  
+✅ **Sales Reports** - Daily/Weekly/Monthly  
+✅ **Dashboard** - Real-time statistics  
+✅ **Multi-user** - Owner/Manager/Cashier roles  
+✅ **Receipt Generation** - Print or digital  
+✅ **Low Stock Alerts** - Never run out  
+
+---
+
+## 🔒 Security Tips
+
+⚠️ **After first login, please:**
+1. Change all default passwords
+2. Create new user accounts
+3. Delete unused accounts
+4. Keep the system updated
+
+---
+
+## 💡 Tips for Best Experience
+
+1. **Use Google Chrome** for best compatibility
+2. **Keep MySQL running** in XAMPP whenever using the system
+3. **Backup database regularly** from phpMyAdmin
+4. **Use on local WiFi only** - don't expose to internet without VPN
+
+---
+
+## 🆘 Need More Help?
+
+### Quick Links:
+- **Full Documentation:** See `README.md`
+- **Manual Setup:** See `README.md` for manual installation
+- **Database Access:** http://localhost/phpmyadmin
+- **Reset System:** Delete database and run setup again
+
+### Common Commands:
+```bash
+# Install dependencies
+npm install
+
+# Start server
+node server.js
+
+# Check Node.js version
+node --version
+
+# Check if running
+netstat -ano | findstr :3000
+```
+
+---
+
+## 📊 What the Setup Wizard Does
+
+Behind the scenes, the wizard:
+
+1. ✅ Checks if Node.js is installed
+2. ✅ Checks if MySQL is running and accessible
+3. ✅ Installs all npm packages (express, mysql2, cors, etc.)
+4. ✅ Creates `canteen_pos` database
+5. ✅ Creates 5 tables (users, products, sales, sale_items, inventory_logs)
+6. ✅ Inserts 3 default users (owner, manager, cashier)
+7. ✅ Inserts 10 sample products (food items with prices)
+8. ✅ Creates database indexes for performance
+9. ✅ Configures server settings
+10. ✅ Opens the login page automatically
+
+**Total Time:** ~2-3 minutes
+
+---
+
+## 🎉 You're All Set!
+
+The setup wizard makes installation super easy. No need to:
+- ❌ Manually create database
+- ❌ Import SQL files
+- ❌ Configure settings
+- ❌ Install packages separately
+
+**Everything is automatic!**
+
+Just run `RUN_SETUP.bat` and follow the wizard.
+
+---
+
+**Created by Group 5**  
+Rappah-El Zion • Roggen Briones • John Robert Arevalo • Alwyn Castro • Carl Andrey Damayo
+
+For technical support, contact the development team.
